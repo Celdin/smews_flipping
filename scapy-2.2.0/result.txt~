@@ -1,0 +1,11 @@
+result1:
+	SYN -> bitflip sur seqNum(de 0 à 5)
+	ACK -> bitflip sur seqNum(de 5 à 2053)
+	GET -> bitflip sur ackNum(de 1119331474 à 1119333522): pas de reponse
+	FIN : crach serveur
+
+result2:
+	SYN -> bitflip sur ackNum(de 0 à 64): pas de reponse
+	GET -> bitflip sur ackNum(de 0 à 128): crach serveur
+	
+

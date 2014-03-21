@@ -1,0 +1,33 @@
+result1:
+	SYN -> bitflip sur seqNum(de 0 à 5)
+	ACK -> bitflip sur seqNum(de 5 à 2053)
+	GET -> bitflip sur ackNum(de 1119331474 à 1119333522): pas de reponse
+	FIN : crach serveur
+
+result2:
+	SYN -> bitflip sur ackNum(de 0 à 64): pas de reponse
+	GET -> bitflip sur ackNum(de 0 à 128): crach serveur
+	
+result3:
+	SYN -> bitflip sur ackNum(de 0 à 32)
+	ACK -> bitflip sur seqNum(de 1 à 5)
+	GET -> bitflip sur seqNum(de 1 à 129):
+		reception de index.html
+	ACK -> bitflip sur seqNum(de 28 à 30): 
+		nouvelle reception de index.html
+	FIN -> bitflip sur total length(de 28 à 1052):
+		nouvelle reception de index.html
+	ACK
+
+result4:
+	(à partir du GET aucune des reponses n'est cath par scapy)
+	SYN -> bitflip sur ackNum(de 0 à 512)
+	ACK -> bitflip sur seqNum(de 1 à 5)
+	GET -> bitflip sur destPort(de 80 à 2128):
+		recetion de index.html
+		nouvelle recetion de index.html
+	FIN - > bitflip sur seqNum(de 1 à 3):
+		3 nouvelle reception de index.html
+	
+	
+	

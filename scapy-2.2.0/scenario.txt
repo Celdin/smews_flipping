@@ -1,0 +1,13 @@
+-Faire du bit-flipping
+-Faire varier "Total lenght" et/ou la taille du packet
+-Faire changer Sequence number et/ou Acknowledg
+-Faire varier l'id
+-Faire evoyer de gros fichier
+-Tenter de surcharger les ports
+-Jouer sur l'automate à états TCP
+-Faire des scénarios ilogique (ex: 5 ACK + 1 RESET)
+
+-> relancer tout les test pour avoir trame
+
+-> à faire sous HTML 1.1 et 1.0
+

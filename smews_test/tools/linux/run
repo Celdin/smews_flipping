@@ -1,0 +1,13 @@
+#!/bin/bash
+
+SMEWS_FOLDER=$1
+
+test -x $SMEWS_FOLDER/bin/linux/smews.elf || exit 1
+
+if [ `id -u` -eq 0 ]
+then
+	# Executing as root
+	$SMEWS_FOLDER/bin/linux/smews.elf &
+else
+	sudo -b $SMEWS_FOLDER/bin/linux/smews.elf
+fi	

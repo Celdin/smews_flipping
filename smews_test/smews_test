@@ -1,0 +1,234 @@
+#!/usr/bin/env python3
+
+import sys, os
+from modules import *
+from subprocess import *
+nbtest = 0
+
+def what(action, test_suite, build_options):
+	return "{};{};{}".format(action, test_suite, smews.build_options_to_string(build_options))
+
+
+def test_build(test_suite, build_options):
+	test.begin(build_options["target"], what("build", test_suite, build_options))
+	try:
+		smews.build(build_options)
+		test.success()
+		return True
+	except smews.SmewsError as e:
+		test.fail(e.message)
+	return False
+
+
+
+def test_program(test_suite, build_options):
+	test.begin(build_options["target"], what("program", test_suite, build_options))
+	try:
+		smews.program(build_options["target"])
+		test.success()
+		return True
+	except smews.SmewsError as e:
+		test.fail(e.message)
+	return False
+
+def test_run(test_suite, build_options):
+	test.begin(build_options["target"], what("run", test_suite, build_options))
+	try:
+		smews.run(build_options["target"], build_options["ipaddr"])
+		test.success()
+		return True
+	except smews.SmewsError as e:
+		test.fail(e.message)
+	return False
+
+def do_test(test_script, test_suite, build_options):
+	test.begin(build_options["target"], what(os.path.basename(test_script), test_suite, build_options))
+	try:
+		args = [test_script, build_options["ipaddr"], build_options["target"]]
+		system.execute(args)
+		test.success()
+		return True
+	except system.ExecutionError as e:
+		test.fail(e.message)
+	return False
+
+def do_tests(test_suite, build_options):
+	# Get script to execute
+	tests = test_suites.get_tests(test_suite, build_options["target"])	
+	for test in tests:
+		do_test(test, test_suite, build_options)
+
+def test_kill(test_suite, build_options):
+	test.begin(build_options["target"], what("kill", test_suite, build_options))
+	try:
+		smews.kill(build_options["target"])
+		test.success()
+		return True
+	except smews.SmewsError as e:
+		test.fail(e.message)
+	return False
+
+
+def ip_from_target(ip,target):
+	if ip == "ipv4":
+		if "slip" in target:
+			ip="192.168.1.{}"
+		elif "ethernet" in target:
+			ip="192.168.100.{}"
+		else:
+			ip="192.168.2.{}"
+	if ip == "ipv6":
+		if "slip" in target:
+			ip="fd23::{}"
+		elif "ethernet" in target:
+			ip="fc23::{}"
+		else:
+			ip="fe23::{}"
+	available_targets = smews.get_target_list()
+	return ip.format(available_targets.index(target)+10)
+
+def do_test_build(test_suite, build_options):
+	global nbtest
+	global build_only
+	# Global filter (for all suites)
+	if not test_suites.filter(".", build_options):
+		return
+	# Suite specific filter
+	if not test_suites.filter(test_suite, build_options):
+		return
+	# Build smews
+	if test_build(test_suite, build_options):
+		# Flash to device
+		if not build_only and test_program(test_suite, build_options):
+			# Run smews
+			if test_run(test_suite, build_options):
+				avantFile = "bitflip/before/"+test_suite+'_'+'_'.join(build_options)+'#'+`nbtest`+'.pcap'
+				apresFile = "bitflip/after/"+test_suite+'_'+'_'.join(build_options)+'#'+`nbtest`+'.pcap'
+				nbtest += 1
+				tcpdump = Popen(['tcpdump','-i','any','-w',avantFile,'dst',build_options['ipaddr']])
+				# Executes tests
+				do_tests(test_suite, build_options)
+				tcpdump.terminate()
+				
+				tcpdump = Popen(['tcpdump','-i','any','-w',apresFile,'host',build_options['ipaddr']])
+
+				call(['python','../scapy-2.2.0/smewsuite.py','file='+avantFile,'-v'])
+				tcpdump.terminate()
+
+				if not call(['pgrep','smews.elf']) == 0:
+					logfile = open("bitflip/fail.txt", mode="a+")
+					logfile.write('#'+`nbtest`+'\n')
+					logfile.close()
+				# Kill
+				test_kill(test_suite, build_options)
+
+
+nbtest = 0
+if len(sys.argv) < 2:
+	sys.stderr.write("Usage: {0} <smews_folder> [logfile=<file>] [targets=<target1,...,targetN] [test_suites=ts1,...,tsN] [tests=test1,...,testN] [disable=<configuration>] [ips=ip1,...,ipN]\n".format(sys.argv[0]))
+	sys.stderr.write("\nOptions list:\n")
+	sys.stderr.write("- logfile: the name of the log file to generate (defaults to 'test.csv')\n")
+	sys.stderr.write("- targets: a comma separated list of targets to test (defaults to all smews available targets)\n")
+	sys.stderr.write("- test_suites: a comma separated list of test_suites to run (defaults to all suites available in 'tests' folder)\n")
+	sys.stderr.write("- tests: a comma separated list of tests script to run (defaults to all tests in the suites)\n")
+	sys.stderr.write("- disable: a comma separated list of disable smews options. This will be used as the *only* tested configuration. (defaults to testing all possible combination of disable options in smews)\n")
+	sys.stderr.write("- ips: a comma separated list of ip to test. If 'ipv4' or 'ipv6' are used, ip is determined from target. If a real ip is used, then the first occurence of {} will be replaced by a number depending on target\n")
+	sys.exit(1)
+
+# Set needed folder to absolute paths
+script_folder = os.path.abspath(sys.path[0])
+test.log_file = os.path.join(script_folder, "test.csv")
+smews.folder = os.path.abspath(sys.argv[1])
+smews.tools_folder = os.path.join(script_folder, "tools")
+# update the PATH environment so that all run scripts have a direct access to the tools scripts
+os.environ["PATH"] = os.environ["PATH"] + ":" + smews.tools_folder
+test_suites.folder = os.path.join(script_folder, "test_suites")
+
+
+targets_to_test = []
+test_suites_to_test = []
+disable = []
+build_only = False
+
+ips = ["ipv4", "ipv6"]
+errorfile = "error.log"
+
+
+for arg in sys.argv[2:]:
+	if arg.startswith("targets="):
+		t, e, targets = arg.partition("=")
+		targets_to_test = targets.split(",")
+	elif arg.startswith("test_suites="):
+		t, e, ts = arg.partition("=")
+		test_suites_to_test = ts.split(",")
+	elif arg.startswith("logfile="):
+		l, e, log = arg.partition("=")
+		test.log_file = os.path.abspath(log)
+	elif arg.startswith("tests="):
+		t, e, tests = arg.partition("=")
+		test_suites.only = tests.split(",")
+	elif arg.startswith("disable="):
+		t, e, dis = arg.partition("=")
+		disable = dis.split(",")
+	elif arg.startswith("ips="):
+		t, e, iplist = arg.partition("=")
+		ips = iplist.split(",")
+	elif arg.startswith("errorlog="):
+		k,e,errorfile = arg.partition("=")
+	elif arg.startswith("build_only="):
+		k,e,build_only = arg.partition("=")
+	else:
+		sys.stderr.write("Bad option {0}\n".format(arg))
+		sys.exit(1)
+					
+
+
+build_only = build_only in ['yes', '1','true']
+
+system.create_logfile(os.path.join(script_folder, errorfile))
+
+
+try:
+	test_suites_list = test_suites.get_list()
+
+	if len(test_suites_to_test):
+		test_suites_list = list(set(test_suites_list) & set(test_suites_to_test))
+
+	last_suite = None
+	for test_suite in test_suites_list:
+		last_suite = test_suite
+		targets = test_suites.get_targets_to_test(test_suite)
+		if len(targets_to_test):
+			targets = list(set(targets) & set(targets_to_test))
+		apps = test_suites.get_apps_to_include(test_suite)
+		# Copy needed apps to smews folder
+		test_suites.copy_apps(test_suite)
+		disable_list = test_suites.get_disable_list(test_suite)
+		if len(disable):
+			disable_list = [disable]
+		build_options = {}
+		for target in targets:
+			build_options["target"] = target
+			for ip in ips:
+				ip = ip_from_target(ip, target)
+				build_options["ipaddr"] = ip				
+				for disable in disable_list:
+					build_options["disable"] = ",".join(disable)
+					build_options["apps"] = ",".join(apps)
+					do_test_build(test_suite, build_options)
+					test.report()
+		# Clean smews folder
+		test_suites.remove_apps(test_suite)
+		last_suite = None
+
+except KeyboardInterrupt:
+	sys.stderr.write("\nAbording tests\n")
+finally:
+	if (last_suite):
+		test_suites.remove_apps(last_suite)
+	test.report(printfail=True)
+
+
+# Local Variables:
+# mode: python
+# End:

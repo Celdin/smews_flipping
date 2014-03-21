@@ -1,0 +1,105 @@
+#!/bin/bash
+
+# . tools.sh
+
+test_count=0
+success_count=0
+
+IPV4_PREFIX=192.168.100.
+IPV6_PREFIX=fc23::
+
+# args: $1 script, $2 ip, $3 target 
+function run_script()
+{
+    test -x $TESTS_FOLDER/targets/$3/$1 || return 0
+    $TESTS_FOLDER/targets/$3/$1 $SMEWS_FOLDER $2
+}
+
+function count_test()
+{
+    test_count=`expr $test_count + 1`
+}
+
+function test_ok()
+{
+    echo -n "."
+    success_count=`expr $success_count + 1`
+}
+
+FAILS=
+
+# Display a fail test message
+# args: $1: ip: $2: target remainder: message
+function test_fail()
+{
+    MESSAGE="FAIL,$1,$2"
+    shift 2
+    MESSAGE="$MESSAGE,$*"
+    FAILS="$FAILS|$MESSAGE"
+    echo $MESSAGE >> $LOG_FILE
+    echo -n "X"
+}
+
+
+# args: $1 ip
+# args: $2 target
+function build_and_check()
+{
+
+    count_test
+    if ! run_script build $1 $2
+    then
+	test_fail $1 $2 "BUILD"
+    else
+	test_ok
+    fi
+
+    for test in `run-parts --list $TESTS_FOLDER/tests 2>/dev/null` `run-parts --list $TESTS_FOLDER/tests/targets/$2 2>/dev/null`
+    do
+	if ! run_script is_alive $1 $2
+	then
+	    run_script launch $1 $2
+	fi
+
+	count_test
+	if ! $test $1 $2 2>> $LOG_FILE 1>&2
+	then
+	    test_fail $1 $2 "TEST:`basename $test`"
+	else
+	    test_ok
+	fi
+    done
+    run_script kill $1 $2
+}
+
+TESTS_FOLDER=`cd \`dirname $0\` && pwd`
+SMEWS_FOLDER=`pwd`
+LOG_FILE="$TESTS_FOLDER/`date +%Y-%m-%d-%H-%M`.log"
+export PATH="$PATH:$TESTS_FOLDER/tools"
+
+echo -n '' > $LOG_FILE
+
+if [ $# -eq 1 ]
+then
+    SMEWS_FOLDER=`cd $1 && pwd`
+fi
+
+IP_POSTFIX=2
+for target in `ls $TESTS_FOLDER/targets`
+do
+    build_and_check ${IPV4_PREFIX}$IP_POSTFIX $target
+    build_and_check ${IPV6_PREFIX}$IP_POSTFIX $target
+    IP_POSTFIX=`expr $IP_POSTFIX + 1`
+done
+
+echo ""
+if [ "$test_count" -eq 0 ]
+then
+    echo "No test performed!"
+    exit 1
+fi
+
+echo $FAILS | tr '|' '\n'
+echo "$success_count/$test_count tests passed"
+
+test $success_count -eq $test_count && rm -f $LOG_FILE

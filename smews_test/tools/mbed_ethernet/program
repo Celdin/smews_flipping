@@ -1,0 +1,15 @@
+#!/bin/bash
+
+set -e
+
+
+TARGET=`cd \`dirname $0\` && pwd`
+TARGET=`basename $TARGET`
+SMEWS_FOLDER=$1
+
+MBED_PATH=`mount -l | grep MBED | cut -d\  -f3 | head -1`
+cp $SMEWS_FOLDER/bin/$TARGET/smews.bin $MBED_PATH && sync && sleep 1
+
+MBED_TTY=`ls /dev/ttyACM? | head -1`
+send_break $MBED_TTY
+sleep 6
