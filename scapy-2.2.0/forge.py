@@ -1,0 +1,89 @@
+from scapy.all import *
+from flipping import *
+
+def newSync(idt):
+	idt += 1
+	sync = IP()/TCP()
+
+	#IP
+	sync[IP].id = idt
+	sync[IP].flags = 'DF'
+	sync[IP].scr = '192.168.0.1'
+	sync[IP].dst = '192.168.1.4'
+	#TCP
+	sync[TCP].dport = 'http'
+	sync[TCP].seq = 0
+	sync[TCP].options= [('MSS', 1460), ('SAckOK', ''), ('Timestamp', (3599299, 0)), ('NOP', None), ('WScale', 7)]
+	del(sync[IP].chksum)
+	del(sync[TCP].chksum)
+
+	sync.show2()
+	sync = packFlip(sync)
+	return sync,idt
+
+def newAck(idt,seq,ack):
+	idt = idt + 1
+	ACK = IP()/TCP()
+
+	#IP
+	ACK[IP].id = idt
+	ACK[IP].flags = 'DF'
+	ACK[IP].scr = '192.168.0.1'
+	ACK[IP].dst = '192.168.1.4'
+	#TCP
+	ACK[TCP].dport = 'http'
+	ACK[TCP].seq = seq
+	ACK[TCP].ack= ack
+	ACK[TCP].flags= 'A'
+
+	del(ACK[IP].chksum)
+	del(ACK[TCP].chksum)
+	ACK.show2()
+	ACK = packFlip(ACK)
+	return ACK,idt;
+
+def newFin(idt,seq,ack):
+	idt = idt + 1
+	Rst = IP()/TCP()
+
+	#IP
+	Rst[IP].id = idt
+	Rst[IP].flags = 'DF'
+	Rst[IP].scr = '192.168.0.1'
+	Rst[IP].dst = '192.168.1.4'
+	#TCP
+	Rst[TCP].dport = 'http'
+	Rst[TCP].seq = seq
+	Rst[TCP].ack= ack
+	Rst[TCP].flags= 'F'
+
+	del(Rst[IP].chksum)
+	del(Rst[TCP].chksum)
+	Rst.show2()
+	Rst = packFlip(Rst)
+	return Rst,idt;
+
+def newReq(idt,seq,ack,requete):
+	idt = idt + 1
+	req = IP()/TCP()/Raw()
+
+	#IP
+	req[IP].id = idt
+	req[IP].flags = 'DF'
+	req[IP].scr = '192.168.0.1'
+	req[IP].dst = '192.168.1.4'
+	#TCP
+	req[TCP].dport = 'http'
+	req[TCP].seq = seq
+	req[TCP].ack= ack
+	req[TCP].flags= 'PA'
+	#Raw
+	req[Raw].load = requete
+
+	del(req[IP].chksum)
+	del(req[TCP].chksum)
+	req.show2()
+	req = packFlip(req)
+	return req,idt;
+	
+
